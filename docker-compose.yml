@@ -1,25 +1,76 @@
-version: '3'
+version: '3.1'
+
+volumes:
+  init-db:
+  data-db:
 
 services:
+
+  mongodb:
+    image: mongo
+    restart: always
+    volumes:
+      - ./backend/init-db:/docker-entrypoint-initdb.d
+      - ./backend/data-db:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: mongoadmin
+      MONGO_INITDB_DATABASE: django_mongodb_docker
+    ports:
+      - 27017:27017
+
+  mongo-express:
+    image: mongo-express
+    restart: always
+    ports:
+      - 8081:8081
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: root
+      ME_CONFIG_MONGODB_ADMINPASSWORD: mongoadmin
+
+  api:
+    image: api
+    restart: always
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/backend
+    ports:
+      - 8000:8000
+    links:
+      - mongodb
+    depends_on:
+      - migration
+
+  migration:
+    build: ./backend
+    image: api
+    command: python manage.py migrate
+    volumes:
+      - ./backend:/backend
+    links:
+      - mongodb
+    depends_on:
+      - make_migrations
+
+  make_migrations:
+    build: ./backend
+    image: api
+    command: python manage.py makemigrations
+    volumes:
+      - ./backend:/backend
+    links:
+      - mongodb
+    depends_on:
+      - mongodb
+  
   frontend:
+    image: frontend
     build: ./frontend
-    expose:
-      - 3000
     ports:
       - 3000:3000
     volumes:
       - ./frontend/src:/usr/src/app/src
       - ./frontend/public:/usr/src/app/public
-  backend:
-    build: ./backend
-    expose:
-      - 5000
-    ports:
-      - 5000:5000
-    volumes:
-      - ./backend:/usr/src/app
-    environment:
-      - FLASK_ENV=development
-      - FLASK_APP=app.py
-      - FLASK_DEBUG=1
-      
+    depends_on:
+      - api
+
